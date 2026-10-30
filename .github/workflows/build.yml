@@ -1,0 +1,17 @@
+name: Build and test
+on: [push, pull_request]
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Test the battle engine
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -I include tests/battle_test.cpp -o /tmp/battle_test
+          /tmp/battle_test
+      - name: Build CoreS3 firmware
+        run: pio run

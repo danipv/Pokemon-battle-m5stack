@@ -1,0 +1,8 @@
+.pio/
+.venv/
+.platformio/
+work/
+__pycache__/
+*.pyc
+.vscode/
+.pio-core
