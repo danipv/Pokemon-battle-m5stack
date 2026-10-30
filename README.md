@@ -61,6 +61,20 @@ Puedes cambiar de Pokémon durante la búsqueda pasando otra tarjeta; durante un
 
 Solo se emparejan **dos robots por zona de juego**: para varias parejas, sepáralas físicamente. No es un sistema de torneos ni tiene selección de rival entre múltiples dispositivos.
 
+### Si no se encuentran
+
+Durante la búsqueda aparecen los contadores **IR TX / RX / OK**:
+
+- **TX**: paquetes que el programa ha enviado al GPIO. No prueba por sí solo que el LED emita luz.
+- **RX**: señales recibidas, incluidas las de mandos y tramas que no se reconocen.
+- **OK**: paquetes válidos de este juego. Un mando de TV puede aumentar RX sin aumentar OK.
+
+Si TX aumenta y RX permanece a cero, pulsa **Salir / nuevo** para dejar el robot solo escuchando y prueba un mando infrarrojo contra la base. Si el mando aumenta RX, el receptor responde: comprueba la emisión y orientación del otro robot. Una cámara de móvil que pueda ver los destellos del mando puede servir para comparar con el LED del robot; algunas cámaras filtran infrarrojos.
+
+El registro USB detalla protocolo, bits y trama recibida. Al arrancar se calibra la portadora de 38 kHz. Durante cada envío se pausa la captura del receptor y se reanuda después, conservando el temporizador del ESP32 en lugar de destruirlo y volverlo a crear.
+
+Según el [esquema de la placa de alimentación](https://m5stack-doc.oss-cn-shenzhen.aliyuncs.com/1205/SCH_Power.pdf), el emisor usa **BUS_5V**; no comparte la salida VM de los servos.
+
 ## Cómo se sincroniza
 
 Protocolo v1 sobre **NEC extendido de 32 bits a 38 kHz**, TX GPIO5 y RX GPIO10. Cada paquete lleva una firma y un tipo: HELLO, ACK, SYNC o BYE. HELLO usa un identificador aleatorio de 16 bits y el Pokémon elegido. No se transmite el UID NFC.

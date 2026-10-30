@@ -19,6 +19,7 @@ static uint32_t nextTx=0;
 static bool sendBye=false;
 static uint16_t byeSession=0;
 static uint8_t byeRound=0,byeRepeats=0;
+static uint32_t irSent=0,irReceived=0,irValid=0,lastIrStatus=0;
 
 static constexpr uint16_t BG = 0x08A4; // RGB(13,22,35), same as GIF frame backgrounds
 static constexpr uint16_t MUTED = 0x9D16;
@@ -240,6 +241,8 @@ void setup() {
     }
     ready=true;
     irTx.begin();
+    const int8_t carrierOffset=irTx.calibrate(38000);
+    Serial.printf("[ir] 38kHz carrier calibrated, offset=%d us\n",int(carrierOffset));
     irRx.enableIRIn();
     irRx.setUnknownThreshold(12);
     Serial.printf("[pokemon] ready, configured=%d heap=%u PSRAM=%u\n",!initialSetup,ESP.getFreeHeap(),ESP.getFreePsram());
@@ -278,8 +281,14 @@ void loop() {
         enemyFrameIndex=(enemyFrameIndex+1)%animation.count;
     }
     if (irRx.decode(&irResult)) {
+        ++irReceived;
+        Serial.printf("[ir] RX protocol=%d bits=%u raw=%u repeat=%d overflow=%d value=%08lX\n",
+                      int(irResult.decode_type),irResult.bits,irResult.rawlen,irResult.repeat,
+                      irResult.overflow,(unsigned long)irResult.value);
         battle::Packet packet{};
         if (irResult.decode_type==NEC && irResult.bits==32 && !irResult.repeat && battle::decode(irResult.value,packet)) {
+            ++irValid;
+            Serial.printf("[ir] VALID kind=%u id=%04X pokemon=%u round=%u\n",unsigned(packet.kind),packet.id,packet.pokemon,packet.round);
             // An equal random nonce is extremely rare: resolve it without assigning identical roles.
             if (game.state==battle::State::Searching && packet.kind==battle::Kind::Hello && packet.id==game.token)
                 choosePokemon(selected);
@@ -304,11 +313,24 @@ void loop() {
             transmit=true; if (!--byeRepeats) sendBye=false;
         } else if (!configuring) transmit=game.transmit(packet);
         if (transmit) {
-            irRx.disableIRIn();
+            // Keep the ESP32 receive timer allocated; only pause its GPIO capture.
+            irRx.pause();
             irTx.sendNEC(battle::encode(packet),32,0);
-            irRx.enableIRIn();
+            irRx.resume();
+            ++irSent;
         }
         nextTx=millis()+300+esp_random()%350;
+    }
+    if (now-lastIrStatus>=2000) {
+        lastIrStatus=now;
+        Serial.printf("[ir] TX=%lu RX=%lu VALID=%lu state=%d heap=%u\n",
+                      (unsigned long)irSent,(unsigned long)irReceived,(unsigned long)irValid,int(game.state),ESP.getFreeHeap());
+        if (!configuring && game.state==battle::State::Searching && !messageUntil) {
+            lcd.fillRect(0,177,320,21,BG);
+            char status[48];
+            snprintf(status,sizeof(status),"IR TX:%lu RX:%lu OK:%lu",(unsigned long)irSent,(unsigned long)irReceived,(unsigned long)irValid);
+            text(status,8,179,MUTED);
+        }
     }
     units.update();
     if (now-lastPoll>=200) {
