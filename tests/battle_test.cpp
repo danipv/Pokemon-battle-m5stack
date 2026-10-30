@@ -1,9 +1,24 @@
 #include <assert.h>
 #include <stdio.h>
 #include "battle.h"
+#include "ir_frame.h"
 using namespace battle;
 
-static Packet wire(const Packet& p) { Packet q{}; assert(decode(encode(p),q)); return q; }
+static Packet wire(const Packet& p) {
+    const uint32_t raw=encode(p);
+    irlink::Pulse pulses[irlink::FRAME_ITEMS];
+    irlink::necFrame(raw,pulses);
+    assert(pulses[0].mark==8960 && pulses[0].space==4480);
+    uint32_t received=0;
+    for (unsigned i=1;i<=32;++i) {
+        assert(pulses[i].mark==560);
+        assert(pulses[i].space==560 || pulses[i].space==1680);
+        received=(received<<1)|(pulses[i].space==1680);
+    }
+    assert(pulses[33].mark==560 && pulses[33].space==20000);
+    assert(received==raw);
+    Packet q{}; assert(decode(received,q)); return q;
+}
 static void exchange(Engine& a, Engine& b, uint32_t now) {
     Packet p{};
     if (a.transmit(p)) b.receive(wire(p),now);

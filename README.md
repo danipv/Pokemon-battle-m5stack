@@ -71,7 +71,9 @@ Durante la búsqueda aparecen los contadores **IR TX / RX / OK**:
 
 Si TX aumenta y RX permanece a cero, pulsa **Salir / nuevo** para dejar el robot solo escuchando y prueba un mando infrarrojo contra la base. Si el mando aumenta RX, el receptor responde: comprueba la emisión y orientación del otro robot. Una cámara de móvil que pueda ver los destellos del mando puede servir para comparar con el LED del robot; algunas cámaras filtran infrarrojos.
 
-El registro USB detalla protocolo, bits y trama recibida. Al arrancar se calibra la portadora de 38 kHz. Durante cada envío se pausa la captura del receptor y se reanuda después, conservando el temporizador del ESP32 en lugar de destruirlo y volverlo a crear.
+El registro USB detalla protocolo, bits y trama recibida. La emisión usa el periférico **RMT del ESP32**, con portadora de 38 kHz y ciclo de trabajo del 50 %; tanto la portadora como las duraciones NEC se generan por hardware. Durante cada envío normal se pausa la captura del receptor y se reanuda después, conservando el temporizador del ESP32 en lugar de destruirlo y volverlo a crear.
+
+Para comprobar físicamente el emisor y el receptor de un solo robot, envía `irtest` seguido de Enter por el monitor serie. Durante 12 segundos emite un código NEC de diagnóstico ajeno al juego y deja el receptor activo. Refleja la luz con una hoja blanca frente a la base. Si recibe ese mismo código, registra `SELFTEST physical echo` y muestra **Eco IR correcto**. No inyecta paquetes simulados: cuenta únicamente ecos capturados por el receptor real. Que no aparezca eco no distingue por sí solo una avería de una reflexión insuficiente.
 
 Según el [esquema de la placa de alimentación](https://m5stack-doc.oss-cn-shenzhen.aliyuncs.com/1205/SCH_Power.pdf), el emisor usa **BUS_5V**; no comparte la salida VM de los servos.
 

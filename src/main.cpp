@@ -9,10 +9,9 @@
 #include "animations.h"
 #include "battle.h"
 #include <IRrecv.h>
-#include <IRsend.h>
+#include "ir_link.h"
 
 static IRrecv irRx(10,256,15,true);
-static IRsend irTx(5);
 static decode_results irResult;
 static battle::Engine game;
 static uint32_t nextTx=0;
@@ -20,6 +19,9 @@ static bool sendBye=false;
 static uint16_t byeSession=0;
 static uint8_t byeRound=0,byeRepeats=0;
 static uint32_t irSent=0,irReceived=0,irValid=0,lastIrStatus=0;
+static bool irSelfTest=false;
+static uint32_t selfTestEnd=0,selfTestReceived=0;
+static constexpr uint32_t SELF_TEST_CODE=0xA55A3CC3; // valid NEC, outside the game's signature
 
 static constexpr uint16_t BG = 0x08A4; // RGB(13,22,35), same as GIF frame backgrounds
 static constexpr uint16_t MUTED = 0x9D16;
@@ -44,6 +46,8 @@ static bool ready = false, frameReady = false;
 static String message;
 
 static auto& lcd = M5.Display;
+static void drawPage();
+static void notify(const String&,bool);
 
 static void stopBattle() {
     if (game.paired()) {
@@ -54,6 +58,7 @@ static void stopBattle() {
 }
 
 static void choosePokemon(int mon) {
+    irSelfTest=false;
     stopBattle();
     selected=mon; haveTag=true;
     uint16_t token=0;
@@ -61,6 +66,24 @@ static void choosePokemon(int mon) {
     game.choose(token,mon,millis());
     nextTx=millis()+100+esp_random()%500;
     Serial.printf("[battle] selected=%s token=%04X\n",NAMES[mon],token);
+}
+
+static void pollSerial() {
+    static char line[24];
+    static uint8_t used=0;
+    while (Serial.available()) {
+        const char c=Serial.read();
+        if (c=='\r') continue;
+        if (c!='\n') { if (used<sizeof(line)-1) line[used++]=c; continue; }
+        line[used]=0; used=0;
+        if (!strcmp(line,"irtest") && !configuring) {
+            stopBattle();
+            irSelfTest=true; selfTestReceived=0;
+            selfTestEnd=millis()+12000; nextTx=millis()+500;
+            drawPage(); notify("Prueba IR: refleja con papel",false);
+            Serial.println("[ir] SELFTEST started: receiver stays enabled; reflect light back with white paper");
+        }
+    }
 }
 
 static bool validCards(const String* list) {
@@ -240,9 +263,9 @@ void setup() {
         return;
     }
     ready=true;
-    irTx.begin();
-    const int8_t carrierOffset=irTx.calibrate(38000);
-    Serial.printf("[ir] 38kHz carrier calibrated, offset=%d us\n",int(carrierOffset));
+    if (!irHardwareBegin()) {
+        ready=false; text("Error emisor IR. Reinicia",12,65,TFT_ORANGE); return;
+    }
     irRx.enableIRIn();
     irRx.setUnknownThreshold(12);
     Serial.printf("[pokemon] ready, configured=%d heap=%u PSRAM=%u\n",!initialSetup,ESP.getFreeHeap(),ESP.getFreePsram());
@@ -252,6 +275,7 @@ void setup() {
 void loop() {
     M5.update();
     if (!ready) { delay(10); return; }
+    pollSerial();
     const uint32_t now=millis();
     const auto touch=M5.Touch.getDetail();
     if (touch.wasClicked() && touch.y>=204) {
@@ -285,6 +309,10 @@ void loop() {
         Serial.printf("[ir] RX protocol=%d bits=%u raw=%u repeat=%d overflow=%d value=%08lX\n",
                       int(irResult.decode_type),irResult.bits,irResult.rawlen,irResult.repeat,
                       irResult.overflow,(unsigned long)irResult.value);
+        if (irSelfTest && irResult.decode_type==NEC && irResult.bits==32 && irResult.value==SELF_TEST_CODE) {
+            ++selfTestReceived;
+            Serial.printf("[ir] SELFTEST physical echo received=%lu\n",(unsigned long)selfTestReceived);
+        }
         battle::Packet packet{};
         if (irResult.decode_type==NEC && irResult.bits==32 && !irResult.repeat && battle::decode(irResult.value,packet)) {
             ++irValid;
@@ -295,6 +323,11 @@ void loop() {
             else if (!configuring) game.receive(packet,now);
         }
         irRx.resume();
+    }
+    if (irSelfTest && (int32_t)(now-selfTestEnd)>=0) {
+        irSelfTest=false;
+        Serial.printf("[ir] SELFTEST finished, physical echoes=%lu\n",(unsigned long)selfTestReceived);
+        notify(selfTestReceived ? "Eco IR correcto" : "Sin eco IR detectado",selfTestReceived==0);
     }
     game.tick(now);
     if (game.dirty && !configuring) {
@@ -308,16 +341,19 @@ void loop() {
     if ((int32_t)(now-nextTx)>=0) {
         battle::Packet packet{};
         bool transmit=false;
-        if (sendBye && byeRepeats) {
+        if (irSelfTest) {
+            // Physical loopback: unlike game packets, keep capture enabled to see reflected light.
+            if (irHardwareSend(SELF_TEST_CODE)) ++irSent;
+        } else if (sendBye && byeRepeats) {
             packet={battle::Kind::Bye,byeSession,0,byeRound};
             transmit=true; if (!--byeRepeats) sendBye=false;
         } else if (!configuring) transmit=game.transmit(packet);
         if (transmit) {
             // Keep the ESP32 receive timer allocated; only pause its GPIO capture.
             irRx.pause();
-            irTx.sendNEC(battle::encode(packet),32,0);
+            const bool sent=irHardwareSend(battle::encode(packet));
             irRx.resume();
-            ++irSent;
+            if (sent) ++irSent;
         }
         nextTx=millis()+300+esp_random()%350;
     }
