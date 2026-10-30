@@ -32,20 +32,25 @@ Dos o más robots Stack-chan se unen como compañeros de equipo para enfrentarse
 
 ---
 
-## 2. Mecánicas de Combate
+## 2. Mecánicas de Combate y Toma de Decisiones Autónoma
 
-### A. Sinergia Elemental y Combos
-1. Cuando el Jugador 1 lanza un ataque elemental (ej. Agua), se abre una **ventana de sinergia de 3,5 segundos**.
-2. Si el Jugador 2 ataca durante esa ventana con un elemento compatible (Planta o Eléctrico), se desata un **Combo Elemental**:
-   - Daño incrementado en un **+60%**.
-   - Carga de la Barra Definitiva (Ultimate) para ambos jugadores (+35%).
-3. **Ataque Definitivo (Combo Ult)**: Al alcanzar el 100% de carga entre ambos, pueden desatar una descarga combinada de 60 de daño base.
+### A. Los Robots Eligen de Forma Autónoma sus Acciones
+Cada Stack-chan posee una **inteligencia táctica contextual** y una **personalidad Pokémon** propia:
 
-### B. Habilidades de Equipo
-En cada turno el jugador puede elegir mediante la pantalla táctil o tarjetas NFC:
-- ⚔️ **Ataque**: Inflige daño elemental al jefe y abre o completa una ventana de combo.
-- 🛡️ **Defensa / Escudo**: Activa una barrera que absorbe el 50% del siguiente ataque del jefe para todo el equipo.
-- 💊 **Cura / Apoyo**: Restaura puntos de vida (+25 PS + bonus de nivel) al compañero más herido.
+| Pokémon | Arquetipo de Personalidad | Comportamiento Táctico Autónomo |
+| :--- | :--- | :--- |
+| **Bulbasaur** | **Soporte (Empático)** | Prioriza curar al compañero cuando sus PS caen por debajo del 70%, busca sinergias de combo y desgasta con ataques constantes. |
+| **Charmander**| **Atacante (Feroz)** | Estilo ofensivo agresivo; prioriza daño masivo, acumula carga definitiva y remata combos elementales. |
+| **Squirtle**  | **Protector (Defensor)** | Analiza los tiempos de ataque del jefe y activa escudos de equipo justo antes de los golpes enemigos para proteger al grupo. |
+| **Pikachu**   | **Estratega (Sinergia)**| Sincroniza sus ataques en las ventanas de sinergia para desatar combos elementales letales. |
+
+### B. Árbol de Prioridades Tácticas en Tiempo Real
+En cada ciclo de combate, el cerebro del robot (`decideAutonomousAction`) evalúa la situación:
+1. **Peligro Crítico**: Si el Jefe está preparando un ataque cargado devastador (`boss.chargeTurn == 1`), el robot prioriza **Escudo de Equipo** gritando: *"¡Cuidado! ¡Escudo de equipo!"*.
+2. **Compañero en Riesgo**: Si el compañero tiene menos del 35% de PS, el robot utiliza **Cura** exclamando: *"¡Aguanta compañero! ¡Te curo!"*.
+3. **Oportunidad de Combo**: Si el compañero acaba de abrir una ventana elemental compatible, aprovecha inmediatamente para disparar un **Combo Elemental (+60% daño)**.
+4. **Habilidad Definitiva (Dúo Ult)**: Al alcanzar el 100% de la barra combinada, desatan juntos el ataque definitivo.
+5. **Decisión por Personalidad**: Si el combate está estable, cada robot actúa según su naturaleza (atacar, defender o apoyar).
 
 ---
 
