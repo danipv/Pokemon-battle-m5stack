@@ -247,17 +247,41 @@ void setup() {
     if (initialSetup) beginConfig(); else drawPage();
 }
 
+static uint32_t servoResetAt = 0;
+
 void loop() {
     const bool touchReady=i2cTryLock();
     if(touchReady) {M5.update();i2cUnlock();}
     if (!ready) { delay(10); return; }
     const uint32_t now=millis();
+    if (servoResetAt && (int32_t)(now - servoResetAt) >= 0) {
+        servoResetAt = 0;
+        servoSetTarget(0.0f, 0.0f);
+    }
     const auto touch=M5.Touch.getDetail();
-    if (touchReady && touch.wasClicked() && touch.y>=204) {
-        if (!configuring && touch.x>=160) { stopBattle(); messageUntil=0; drawPage(); }
-        else if (!configuring) beginConfig();
-        else if (initialSetup) beginConfig();
-        else { configuring=false; messageUntil=0; drawPage(); }
+    if (touchReady && touch.wasClicked()) {
+        if (touch.y < 204) {
+            if (!configuring && (game.state == battle::State::Idle || game.state == battle::State::Searching)) {
+                int next = (selected + 1) % 3;
+                choosePokemon(next);
+                safeLeds(LEDS[next][0], LEDS[next][1], LEDS[next][2]);
+                drawPage();
+            }
+        } else {
+            if (!configuring && touch.x>=160) {
+                if (game.state == battle::State::Idle) {
+                    choosePokemon(selected);
+                    safeLeds(LEDS[selected][0], LEDS[selected][1], LEDS[selected][2]);
+                } else {
+                    stopBattle();
+                }
+                messageUntil=0;
+                drawPage();
+            }
+            else if (!configuring) beginConfig();
+            else if (initialSetup) beginConfig();
+            else { configuring=false; messageUntil=0; drawPage(); }
+        }
     }
     if (messageUntil && (int32_t)(now-messageUntil)>=0) {
         messageUntil=0;
@@ -284,9 +308,12 @@ void loop() {
     while(sound::takePacket(incoming)) {
         Serial.printf("[sound] RX kind=%u id=%04X round=%u\n",unsigned(incoming.kind),incoming.id,incoming.round);
         if(!configuring) {
-            if(game.state==battle::State::Searching && incoming.kind==battle::Kind::Hello && incoming.id==game.token)
-                choosePokemon(selected);
-            else game.receive(incoming,now);
+            // Anti-echo filtering: ignore echo of our own transmissions bouncing back
+            if (incoming.id == game.token) {
+                Serial.println("[sound] Discarding own acoustic echo");
+                continue;
+            }
+            game.receive(incoming,now);
             nextTx=now+650+esp_random()%400;
         }
     }
@@ -297,6 +324,14 @@ void loop() {
         if (game.state==battle::State::Finished) {
             if(!finishedAt) finishedAt=now;
             safeLeds(game.won() ? 0 : LED_MAX_LEVEL,game.won() ? LED_MAX_LEVEL : 0,0);
+            servoSetTarget(game.won() ? 0.20f : 0.0f, game.won() ? 0.15f : 0.38f);
+        } else if (game.state==battle::State::Fighting && game.round) {
+            if (game.lastAttacker == game.mySide()) {
+                servoSetTarget(0.0f, 0.25f); // attack lunge forward
+            } else {
+                servoSetTarget(-0.15f, -0.20f); // recoil back
+            }
+            servoResetAt = now + 550;
         }
     }
     const bool audioHealthy=!audioState.heartbeat || now-audioState.heartbeat<1500;

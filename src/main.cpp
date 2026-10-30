@@ -278,11 +278,31 @@ void loop() {
     pollSerial();
     const uint32_t now=millis();
     const auto touch=M5.Touch.getDetail();
-    if (touch.wasClicked() && touch.y>=204) {
-        if (!configuring && touch.x>=160) { stopBattle(); messageUntil=0; drawPage(); }
-        else if (!configuring) beginConfig();
-        else if (initialSetup) beginConfig();
-        else { configuring=false; messageUntil=0; drawPage(); }
+    if (touch.wasClicked()) {
+        if (touch.y < 204) {
+            if (!configuring && (game.state == battle::State::Idle || game.state == battle::State::Searching)) {
+                int next = (selected + 1) % 3;
+                choosePokemon(next);
+                setBaseLeds(LEDS[next][0], LEDS[next][1], LEDS[next][2]);
+                M5.Speaker.tone(900 + next * 400, 80);
+                drawPage();
+            }
+        } else {
+            if (!configuring && touch.x>=160) {
+                if (game.state == battle::State::Idle) {
+                    choosePokemon(selected);
+                    setBaseLeds(LEDS[selected][0], LEDS[selected][1], LEDS[selected][2]);
+                    M5.Speaker.tone(900 + selected * 400, 80);
+                } else {
+                    stopBattle();
+                }
+                messageUntil=0;
+                drawPage();
+            }
+            else if (!configuring) beginConfig();
+            else if (initialSetup) beginConfig();
+            else { configuring=false; messageUntil=0; drawPage(); }
+        }
     }
     if (messageUntil && (int32_t)(now-messageUntil)>=0) {
         messageUntil=0;

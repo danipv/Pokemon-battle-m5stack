@@ -34,7 +34,7 @@ static void task(void*) {
         const bool ok=M5.Mic.begin();
         testDecoder.reset();packetDecoder.reset();s.inFrame=false;
         s.mode=ok ? Mode::Listening : Mode::Error;
-        ignoreUntil=millis()+200; // discard codec startup and residual speaker echo
+        ignoreUntil=millis()+550; // discard codec startup, physical resonance and speaker echo
         return ok;
     };
     closeAudio();publish();
