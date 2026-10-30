@@ -214,7 +214,9 @@ void setup() {
     lcd.setTextWrap(false);
     lcd.fillScreen(BG);
     text("POKEMON BATTLE: iniciando...",12,20);
-    boardInit(false); // no head movement or servo boost power
+    boardInit(true);
+    servoInit(); // center pan and level tilt using the calibrated home positions
+    delay(600);
     setBaseLeds(0,0,0);
     M5.Speaker.setVolume(90);
     storageReady=prefs.begin("pokemon-nfc",false);

@@ -71,7 +71,7 @@ El intervalo mínimo de turno es 1,8 s; se alarga si hace falta resincronizar. T
 
 ## Animaciones y memoria
 
-Conserva las tres animaciones originales de la Pokedex. Todos los fotogramas están en flash; se reutiliza un único lienzo de 160 × 128 en PSRAM para dibujar los dos Pokémon. No se guardan fotogramas en NVS, ni se acumula un historial de partidas. No se inicia cámara, Wi-Fi ni motores.
+Conserva las tres animaciones originales de la Pokedex. Todos los fotogramas están en flash; se reutiliza un único lienzo de 160 × 128 en PSRAM para dibujar los dos Pokémon. No se guardan fotogramas en NVS, ni se acumula un historial de partidas. No se inicia cámara ni Wi-Fi. Al arrancar, centra la cabeza y la coloca horizontal con las posiciones calibradas de los servos.
 
 Los GIF fuente y sus atribuciones están en `assets/` y [THIRD_PARTY.md](THIRD_PARTY.md). Para regenerarlos: `python -m pip install pillow` y `python tools/prepare_assets.py`.
 
