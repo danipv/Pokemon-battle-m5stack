@@ -13,5 +13,9 @@ jobs:
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -I include tests/battle_test.cpp -o /tmp/battle_test
           /tmp/battle_test
+      - name: Test acoustic tone sequences
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -I include tests/tone_test.cpp -o /tmp/tone_test
+          /tmp/tone_test
       - name: Build CoreS3 firmware
         run: pio run

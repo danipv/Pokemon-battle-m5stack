@@ -1,17 +1,22 @@
-# Pokémon Battle · M5Stack StackChan
+# Pokémon Battle M5Stack · prueba por tonos v0.1
 
-Dos StackChan, dos tarjetas NFC y un combate por **infrarrojos**, sin Wi-Fi, internet ni microSD. Cada jugador elige **Bulbasaur, Charmander o Squirtle** acercando su tarjeta a la base. Los robots se encuentran y el combate empieza automáticamente.
+Primera prueba de comunicación por **altavoz y micrófono** entre dos StackChan K151/CoreS3. Es el programa predeterminado del repositorio. De momento identifica Bulbasaur, Charmander y Squirtle mediante secuencias cortas; todavía no transmite turnos ni inicia combates.
 
-## Necesitas
+## Prueba rápida
 
-- Dos StackChan K151 con CoreS3 y sus bases con NFC e infrarrojos.
-- El mismo firmware de este repositorio en ambos robots.
-- Tres tarjetas NFC-A distintas por jugador (NTAG213/215/216, MIFARE…). También podéis usar un mismo juego de tarjetas por turnos.
-- USB-C de datos para instalar. Después el combate funciona sin ordenador.
+1. Instala esta versión en ambos robots y colócalos inicialmente a unos 20–40 cm, en un lugar tranquilo.
+2. En el receptor, pulsa **Escuchar**. Aparece el nivel de entrada y el tono detectado.
+3. En el emisor, elige un Pokémon y pulsa **Emitir tonos**.
+4. El receptor debe mostrar **RX: Bulbasaur**, **RX: Charmander** o **RX: Squirtle**, y aumentar el contador.
+5. Repite con los otros Pokémon e intercambia emisor/receptor para comprobar ambos sentidos.
+
+**Parar** detiene la prueba. El micrófono y el altavoz comparten I2S: un robot escucha o emite, nunca ambas cosas a la vez. No pulses Emitir simultáneamente en ambos.
+
+No necesita Wi-Fi ni microSD. Esta prueba no lee ni modifica las tarjetas: **las asignaciones NFC anteriores permanecen guardadas**. No hagas un borrado completo de flash. La cabeza se centra al arrancar.
 
 ## Instalación en Windows
 
-Instala [Python 3.10 o posterior](https://www.python.org/downloads/windows/) (marca añadir Python al PATH) y [Git](https://git-scm.com/download/win), si todavía no los tienes. También puedes descargar el ZIP del repositorio.
+Con Python y Git instalados, clona el repositorio y prepara el entorno una vez:
 
 ```powershell
 git clone https://github.com/danipv/Pokemon-battle-m5stack.git
@@ -20,88 +25,49 @@ cd Pokemon-battle-m5stack
 .\run.bat -Usb COM3
 ```
 
-Sustituye `COM3` por el puerto de tu robot, visible en el Administrador de dispositivos. Sin `-Usb` PlatformIO intenta detectarlo. La primera compilación descarga el framework y compiladores y puede tardar varios minutos. `setup.bat` crea `.venv`, instala dependencias y compila; `run.bat` compila y carga por USB.
+Para actualizar una instalación existente:
 
-Para ver el registro USB tras instalar: `run.bat -Usb COM3 -NoFlash -Monitor`. Cierra cualquier otro monitor que esté usando ese puerto. Si no se puede cargar, mantén RST unos tres segundos hasta el LED verde y vuelve a intentarlo.
-
-Con PlatformIO ya instalado (Windows, Linux o macOS):
-
-```bash
-pio run
-pio run -t upload
-pio device monitor -b 115200
+```powershell
+git pull
+.\run.bat -Usb COM3
 ```
 
-En Windows se usa una carpeta corta para el compilador (`%USERPROFILE%\.pokemon-pio`) para evitar errores de longitud de ruta. Puedes elegir otra con `setup.bat -CoreDir RUTA`. La ruta local queda en `.pio-core`, excluida de Git.
+Cambia COM3 por tu puerto. El entorno predeterminado es **tone-test**. Para ver el registro sin cargar otra vez: `run.bat -NoFlash -Monitor -Usb COM3`.
 
-## Tarjetas: conserva la Pokedex anterior
+Con PlatformIO directamente: `pio run -e tone-test -t upload` y `pio device monitor -e tone-test -b 115200`.
 
-El firmware lee **el mismo espacio NVS `pokemon-nfc` y clave `cards`** de la Pokedex de tres iniciales. Si ya las configuraste en ese robot, las reconoce al actualizar por USB. **No ejecutes `erase_flash`** ni cambies la tabla de particiones si quieres conservarlas.
+## Prueba con un ordenador o móvil
 
-En un robot nuevo aparece el asistente:
+En `assets/tones/` están los tres WAV de referencia. Pon el robot en **Escuchar** y reproduce uno cerca de él, a volumen moderado. Cada archivo tiene medio segundo de silencio al principio y al final. Para regenerarlos, sin dependencias adicionales: `python tools/make_tone_wavs.py assets/tones`.
 
-1. Acerca una tarjeta para Bulbasaur y retírala.
-2. Acerca otra para Charmander y retírala.
-3. Acerca una tercera para Squirtle.
+## Secuencias
 
-Rechaza tarjetas repetidas. Guarda las tres asignaciones juntas y las conserva al apagar. **No modifica el contenido de las tarjetas** ni necesita NDEF. Cada robot guarda sus propias asignaciones, sin compartir UID por infrarrojos.
+Cada nota dura 300 ms, con 100 ms de silencio entre notas:
 
-Pulsa **Tarjetas** para cambiarlas; **Cancelar / volver** mantiene las anteriores hasta completar las tres nuevas. Retira una tarjeta aproximadamente dos segundos antes de volver a presentarla.
+| Pokémon | Inicio | Identificador | Final |
+|---|---|---|---|
+| Bulbasaur | 2400 Hz | 1000 Hz | 2800 Hz |
+| Charmander | 2400 Hz | 1400 Hz | 2800 Hz |
+| Squirtle | 2400 Hz | 1800 Hz | 2800 Hz |
 
-## Jugar
+El receptor muestrea a 16 kHz en bloques de 20 ms y mide las cinco frecuencias con Goertzel. Exige un tono dominante durante al menos 60 ms y la secuencia inicio → identificador → final en menos de dos segundos. Ignora tonos aislados, demasiado cortos o muy débiles. Un tono sostenido no genera recepciones duplicadas.
 
-1. Coloca los robots cerca, con **el emisor y receptor IR de las bases orientados entre sí**, sin obstáculos. Empieza a unos 10–30 cm y ajusta la posición; no basta con que las caras se miren. Evita sol directo.
-2. Cada jugador acerca su tarjeta. La pantalla indica **Buscando rival por infrarrojos**.
-3. Cuando se reconocen aparecen ambos Pokémon animados y sus barras de vida.
-4. El combate es **automático, por turnos**. Empieza con 100 PS por Pokémon. El primer turno se decide usando los identificadores aleatorios de la partida.
-5. Fuego gana ventaja contra Planta; Planta contra Agua; Agua contra Fuego. El daño base varía de 12 a 18: con ventaja se duplica y con desventaja se reduce a la mitad. Gana quien deje al rival a 0 PS.
-6. Ambos robots muestran victoria/derrota. Pulsa **Salir / nuevo** y vuelve a acercar una tarjeta para otra partida.
+Esta versión no incluye CRC, reintentos ni emparejamiento: sirve para validar el enlace acústico antes de conectarlo al combate. El ruido, la distancia y el volumen deben probarse físicamente.
 
-Puedes cambiar de Pokémon durante la búsqueda pasando otra tarjeta; durante un combate la elección queda bloqueada. Pulsa **Salir / nuevo** para cancelarlo. Si se pierde el enlace, se detiene y muestra **Sin enlace**, sin inventar un ganador.
+## Código y pruebas
 
-Solo se emparejan **dos robots por zona de juego**: para varias parejas, sepáralas físicamente. No es un sistema de torneos ni tiene selección de rival entre múltiples dispositivos.
-
-### Si no se encuentran
-
-Durante la búsqueda aparecen los contadores **IR TX / RX / OK**:
-
-- **TX**: paquetes que el programa ha enviado al GPIO. No prueba por sí solo que el LED emita luz.
-- **RX**: señales recibidas, incluidas las de mandos y tramas que no se reconocen.
-- **OK**: paquetes válidos de este juego. Un mando de TV puede aumentar RX sin aumentar OK.
-
-Si TX aumenta y RX permanece a cero, pulsa **Salir / nuevo** para dejar el robot solo escuchando y prueba un mando infrarrojo contra la base. Si el mando aumenta RX, el receptor responde: comprueba la emisión y orientación del otro robot. Una cámara de móvil que pueda ver los destellos del mando puede servir para comparar con el LED del robot; algunas cámaras filtran infrarrojos.
-
-El registro USB detalla protocolo, bits y trama recibida. La emisión usa el periférico **RMT del ESP32**, con portadora de 38 kHz y ciclo de trabajo del 50 %; tanto la portadora como las duraciones NEC se generan por hardware. Durante cada envío normal se pausa la captura del receptor y se reanuda después, conservando el temporizador del ESP32 en lugar de destruirlo y volverlo a crear.
-
-Para comprobar físicamente el emisor y el receptor de un solo robot, envía `irtest` seguido de Enter por el monitor serie. Durante 12 segundos emite un código NEC de diagnóstico ajeno al juego y deja el receptor activo. Refleja la luz con una hoja blanca frente a la base. Si recibe ese mismo código, registra `SELFTEST physical echo` y muestra **Eco IR correcto**. No inyecta paquetes simulados: cuenta únicamente ecos capturados por el receptor real. Que no aparezca eco no distingue por sí solo una avería de una reflexión insuficiente.
-
-Según el [esquema de la placa de alimentación](https://m5stack-doc.oss-cn-shenzhen.aliyuncs.com/1205/SCH_Power.pdf), el emisor usa **BUS_5V**; no comparte la salida VM de los servos.
-
-## Cómo se sincroniza
-
-Protocolo v1 sobre **NEC extendido de 32 bits a 38 kHz**, TX GPIO5 y RX GPIO10. Cada paquete lleva una firma y un tipo: HELLO, ACK, SYNC o BYE. HELLO usa un identificador aleatorio de 16 bits y el Pokémon elegido. No se transmite el UID NFC.
-
-Ambos calculan la misma sesión, orden de turnos y daños. Cada turno exige que el otro robot haya confirmado el anterior. Los SYNC se repiten con intervalos aleatorios para reducir colisiones; los duplicados no producen ataques extra. Se apaga la recepción al emitir para evitar recibir el propio LED. Los paquetes de otras sesiones se descartan.
-
-El intervalo mínimo de turno es 1,8 s; se alarga si hace falta resincronizar. Tras 12 s sin recibir señal o 20 s sin avanzar, se cancela el combate. La firma de sesión es corta: este protocolo está pensado para dos juguetes próximos, no para autenticación o juego competitivo seguro.
-
-## Animaciones y memoria
-
-Conserva las tres animaciones originales de la Pokedex. Todos los fotogramas están en flash; se reutiliza un único lienzo de 160 × 128 en PSRAM para dibujar los dos Pokémon. No se guardan fotogramas en NVS, ni se acumula un historial de partidas. No se inicia cámara ni Wi-Fi. Al arrancar, centra la cabeza y la coloca horizontal con las posiciones calibradas de los servos.
-
-Los GIF fuente y sus atribuciones están en `assets/` y [THIRD_PARTY.md](THIRD_PARTY.md). Para regenerarlos: `python -m pip install pillow` y `python tools/prepare_assets.py`.
-
-## Pruebas del protocolo
-
-`include/battle.h` es el motor real utilizado por el firmware y por `tests/battle_test.cpp`. Las pruebas comprueban codificación, tipos, 900 combates con pérdidas/duplicados/retrasos, coincidencia de resultados, paquetes ajenos, cancelación y tiempos de espera.
-
-Con un compilador C++17:
+- `src/tone_test.cpp`: pantalla y cambio seguro entre altavoz y micrófono.
+- `include/tone_protocol.h`: detector y secuencia compartidos con las pruebas.
+- `tests/tone_test.cpp`: tres secuencias con ruido y offset de continua; notas ausentes, cortas y débiles; tiempos de espera y duplicados.
+- `assets/tones/`: WAV de referencia.
 
 ```bash
-g++ -std=c++17 -I include tests/battle_test.cpp -o battle_test
-./battle_test
+g++ -std=c++17 -Wall -Wextra -Werror -I include tests/tone_test.cpp -o tone_test
+./tone_test
 ```
 
-También puede usarse `zig c++ -std=c++17 -I include tests/battle_test.cpp -o battle_test`. El registro serie muestra el arranque, lecturas NFC, estado de combate, turno y vida.
+El monitor USB acepta `listen`, `send 0`, `send 1`, `send 2` y `stop`. Muestra nivel, frecuencia detectada y cada Pokémon recibido. Si no recibe, comprueba que el nivel cambia al hablar y prueba primero un WAV cerca del micrófono.
 
-**Límite de validación:** las pruebas de software no sustituyen una prueba física entre dos bases: la distancia y orientación IR deben comprobarse con ambos robots.
+El programa anterior permanece en el entorno `m5stack-cores3`, con documentación en [docs/INFRARED_LEGACY.md](docs/INFRARED_LEGACY.md). Para restaurarlo: `run.bat -Env m5stack-cores3 -Usb COM3`.
+
+Procedencia del hardware y de los sprites anteriores: [THIRD_PARTY.md](THIRD_PARTY.md). Esta prueba no utiliza los sprites.
