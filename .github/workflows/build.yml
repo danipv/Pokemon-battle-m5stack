@@ -18,4 +18,8 @@ jobs:
           g++ -std=c++17 -Wall -Wextra -Werror -I include tests/tone_test.cpp -o /tmp/tone_test
           /tmp/tone_test
       - name: Build CoreS3 firmware
-        run: pio run
+        run: pio run -e tone-test -e acoustic-battle
+      - name: Test acoustic battle packets
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -I include tests/acoustic_test.cpp -o /tmp/acoustic_test
+          /tmp/acoustic_test

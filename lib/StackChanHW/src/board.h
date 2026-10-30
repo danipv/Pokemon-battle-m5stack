@@ -37,6 +37,7 @@ void setBaseLeds(uint8_t r, uint8_t g, uint8_t b);
 // loop() around its I2C work (touch, PMIC, NFC...). Recursive: nesting is fine.
 void i2cLock();
 void i2cUnlock();
+bool i2cTryLock(uint32_t timeoutMs=0);
 struct I2CGuard {
     I2CGuard() { i2cLock(); }
     ~I2CGuard() { i2cUnlock(); }

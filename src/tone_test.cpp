@@ -1,18 +1,15 @@
 // Quick half-duplex speaker/microphone transport test. NFC/NVS is untouched.
 #include <M5Unified.h>
 #include "board.h"
-#include "tone_protocol.h"
+#include "audio_modem.h"
 
 static constexpr uint16_t BG=0x08A4,ACCENT=0x4DFF;
 static const char* NAMES[]={"Bulbasaur","Charmander","Squirtle"};
-enum class Mode { Idle,Listening,Sending };
+using Mode=sound::Mode;
 static Mode mode=Mode::Idle;
-static tones::Decoder decoder;
+static sound::Status audioState;
 static int selected=0,lastReceived=-1;
-static uint32_t received=0,lastUi=0,nextStep=0;
-static int sendStep=0;
-static int16_t samples[tones::BLOCK];
-static bool pending=false;
+static uint32_t received=0,lastUi=0;
 static String status="Pulsa Escuchar o Emitir";
 static auto& lcd=M5.Display;
 
@@ -21,7 +18,7 @@ static void text(const String& s,int x,int y,uint16_t color=TFT_WHITE) {
 }
 static void draw() {
     lcd.fillScreen(BG);
-    text("PRUEBA TONOS v0.1",12,8,ACCENT);
+    text("PRUEBA TONOS v0.2",12,8,ACCENT);
     for(int i=0;i<3;++i) {
         const int x=6+105*i;
         lcd.fillRoundRect(x,34,99,36,7,i==selected ? 0x1C73 : 0x2188);
@@ -34,7 +31,7 @@ static void draw() {
     text(status,8,137,ACCENT);
     if(mode==Mode::Listening) {
         char live[64];
-        snprintf(live,sizeof(live),"Nivel %.0f  Tono %d Hz",decoder.rms,decoder.tone<0 ? 0 : tones::FREQUENCIES[decoder.tone]);
+        snprintf(live,sizeof(live),"Nivel %.0f  Tono %d Hz",audioState.rms,audioState.toneHz);
         text(live,8,159);
     }
     if(lastReceived>=0) text(String("RX: ")+NAMES[lastReceived]+"  #"+received,8,180,TFT_GREEN);
@@ -42,36 +39,11 @@ static void draw() {
     text("Parar",136,211);
 }
 
-static void stopAudio() {
-    // End the recorder before reusing its buffer or giving I2S to the speaker.
-    I2CGuard lock;
-    if(M5.Mic.isRunning()) M5.Mic.end();
-    pending=false;
-    if(M5.Speaker.isRunning()) {M5.Speaker.stop();M5.Speaker.end();}
-    mode=Mode::Idle;
-}
-
-static void listen() {
-    stopAudio();
-    {
-        I2CGuard lock;
-        if(!M5.Mic.begin()) {status="Error microfono. Reinicia";draw();return;}
-    }
-    decoder.reset();
-    mode=Mode::Listening;status="ESCUCHANDO...";draw();
-    Serial.println("[tones] listening 16000 Hz");
-}
-
+static void stopAudio() {sound::stop();mode=Mode::Idle;}
+static void listen() {sound::listenTest();status="Iniciando escucha...";draw();}
 static void transmit() {
-    stopAudio();
-    {
-        I2CGuard lock;
-        if(!M5.Speaker.begin()) {status="Error altavoz. Reinicia";draw();return;}
-        M5.Speaker.setVolume(140);
-    }
-    mode=Mode::Sending;sendStep=0;nextStep=millis();
-    status=String("TX: ")+NAMES[selected];draw();
-    Serial.printf("[tones] sending %s\n",NAMES[selected]);
+    status=sound::sendPokemon(selected) ? String("TX: ")+NAMES[selected] : "Audio ocupado. Reintenta";
+    draw();
 }
 
 static void serialCommands() {
@@ -92,53 +64,42 @@ void setup() {
     lcd.setRotation(1);lcd.setBrightness(170);
     lcd.setFont(&fonts::efontJA_16);lcd.setTextDatum(top_left);lcd.setTextWrap(false);
     boardInit(true);servoInit();delay(600);setBaseLeds(0,0,0);
-    stopAudio();draw();
-    Serial.println("[tones] v0.1 ready; commands: listen | send 0 | send 1 | send 2 | stop");
+    if(!sound::begin()) status="Error creando audio";
+    draw();
+    Serial.println("[tones] v0.2 ready; commands: listen | send 0 | send 1 | send 2 | stop");
 }
 
 void loop() {
-    {I2CGuard lock;M5.update();}
+    const bool touchReady=i2cTryLock();
+    if(touchReady) {M5.update();i2cUnlock();}
     serialCommands();
     const auto touch=M5.Touch.getDetail();
-    if(touch.wasClicked()) {
+    if(touchReady && touch.wasClicked()) {
         if(touch.y>=34 && touch.y<70 && mode!=Mode::Sending) {selected=constrain(touch.x/105,0,2);draw();}
         else if(touch.y>=82 && touch.y<126) {if(touch.x<160) transmit();else listen();}
-        else if(touch.y>=204) {stopAudio();status="Parado";draw();}
+        else if(touch.y>=204) {stopAudio();status="Parando audio...";draw();}
     }
     const uint32_t now=millis();
-    if(mode==Mode::Sending && (int32_t)(now-nextStep)>=0) {
-        if(sendStep>=6) {
-            M5.Speaker.stop();mode=Mode::Idle;status="Enviado. Repite si hace falta";draw();
-            Serial.println("[tones] sent");
-        } else if(!(sendStep&1)) {
-            const int hz=sendStep==0 ? 2400 : sendStep==2 ? tones::FREQUENCIES[selected] : 2800;
-            M5.Speaker.tone(hz,tones::NOTE_MS);
-            nextStep=now+tones::NOTE_MS;++sendStep;
-        } else {
-            M5.Speaker.stop();nextStep=now+tones::GAP_MS;++sendStep;
-        }
+    audioState=sound::status();
+    if(audioState.mode!=mode) {
+        const Mode previous=mode;mode=audioState.mode;
+        if(mode==Mode::Listening) status="ESCUCHANDO...";
+        else if(mode==Mode::Sending) status=String("TX: ")+NAMES[selected];
+        else if(mode==Mode::Error) status="Error audio. Pulsa Escuchar";
+        else status=previous==Mode::Sending ? "Enviado" : "Parado";
+        draw();
     }
-    if(mode==Mode::Listening) {
-        if(pending && !M5.Mic.isRecording()) {
-            const int decoded=decoder.consume(samples,now);
-            pending=false;
-            if(decoded>=0) {
-                lastReceived=decoded;++received;
-                Serial.printf("[tones] RX %s count=%lu rms=%.0f confidence=%.2f\n",NAMES[decoded],(unsigned long)received,decoder.rms,decoder.confidence);
-                draw();
-            }
+    if(audioState.received!=received && audioState.pokemon>=0) {
+        received=audioState.received;lastReceived=audioState.pokemon;draw();
+    }
+    if(now-lastUi>=250) {
+        lastUi=now;
+        if(audioState.heartbeat && now-audioState.heartbeat>1500 && mode!=Mode::Idle) {
+            lcd.fillRect(0,134,320,22,BG);text("Audio sin respuesta. Reinicia",8,137,TFT_ORANGE);
         }
-        if(!pending) {
-            pending=M5.Mic.record(samples,tones::BLOCK,tones::RATE);
-            if(!pending) {stopAudio();status="Error capturando microfono";draw();}
-        }
-        // Refresh a small strip while asynchronous microphone capture continues.
-        if(now-lastUi>=1000) {
-            lastUi=now;
-            Serial.printf("[tones] rms=%.0f tone=%d confidence=%.2f\n",decoder.rms,decoder.tone<0 ? 0 : tones::FREQUENCIES[decoder.tone],decoder.confidence);
-            // This is a small text strip; capture runs asynchronously in the mic task.
+        if(mode==Mode::Listening) {
             lcd.fillRect(0,156,320,22,BG);
-            char live[64];snprintf(live,sizeof(live),"Nivel %.0f  Tono %d Hz",decoder.rms,decoder.tone<0 ? 0 : tones::FREQUENCIES[decoder.tone]);
+            char live[64];snprintf(live,sizeof(live),"Nivel %.0f  Tono %d Hz",audioState.rms,audioState.toneHz);
             text(live,8,159);
         }
     }

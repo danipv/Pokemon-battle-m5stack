@@ -1,4 +1,6 @@
-# Pokémon Battle M5Stack · prueba por tonos v0.1
+# Pokémon Battle M5Stack · comunicación por tonos
+
+La prueba de tonos v0.2 separa el audio de la pantalla para evitar que una espera de captura paralice la interfaz. También está preparado el entorno **acoustic-battle**, con tarjetas NFC, animaciones, comprobación CRC y sincronización de combate: consulta [docs/ACOUSTIC_BATTLE.md](docs/ACOUSTIC_BATTLE.md). La integración completa aún necesita una prueba física entre dos robots.
 
 Primera prueba de comunicación por **altavoz y micrófono** entre dos StackChan K151/CoreS3. Es el programa predeterminado del repositorio. De momento identifica Bulbasaur, Charmander y Squirtle mediante secuencias cortas; todavía no transmite turnos ni inicia combates.
 
@@ -52,11 +54,12 @@ Cada nota dura 300 ms, con 100 ms de silencio entre notas:
 
 El receptor muestrea a 16 kHz en bloques de 20 ms y mide las cinco frecuencias con Goertzel. Exige un tono dominante durante al menos 60 ms y la secuencia inicio → identificador → final en menos de dos segundos. Ignora tonos aislados, demasiado cortos o muy débiles. Un tono sostenido no genera recepciones duplicadas.
 
-Esta versión no incluye CRC, reintentos ni emparejamiento: sirve para validar el enlace acústico antes de conectarlo al combate. El ruido, la distancia y el volumen deben probarse físicamente.
+La prueba manual `tone-test` no incluye CRC, reintentos ni emparejamiento: sirve para validar el enlace acústico. El entorno `acoustic-battle` sí incluye paquetes con CRC y confirmación de turnos. El ruido, la distancia y el volumen deben probarse físicamente.
 
 ## Código y pruebas
 
-- `src/tone_test.cpp`: pantalla y cambio seguro entre altavoz y micrófono.
+- `src/tone_test.cpp`: pantalla de la prueba manual.
+- `src/audio_modem.cpp`: única tarea propietaria del altavoz y micrófono, compartida con el combate.
 - `include/tone_protocol.h`: detector y secuencia compartidos con las pruebas.
 - `tests/tone_test.cpp`: tres secuencias con ruido y offset de continua; notas ausentes, cortas y débiles; tiempos de espera y duplicados.
 - `assets/tones/`: WAV de referencia.

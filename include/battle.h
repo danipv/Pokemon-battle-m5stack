@@ -40,6 +40,8 @@ inline int damage(uint8_t attacker, uint8_t defender, uint32_t seed, uint8_t rou
 
 class Engine {
 public:
+    explicit Engine(uint32_t turnMs=1800,uint32_t contactMs=12000,uint32_t progressMs=20000)
+        : turnInterval(turnMs),contactTimeout(contactMs),progressTimeout(progressMs) {}
     State state=State::Idle;
     uint16_t token=0, peer=0, session=0;
     uint8_t pokemon=0, opponent=0, round=0, peerRound=0;
@@ -90,14 +92,14 @@ public:
     }
     void tick(uint32_t now) {
         if (state==State::Searching) {
-            if (peer && now-lastContact>12000) { peer=0; dirty=true; }
+            if (peer && now-lastContact>contactTimeout) { peer=0; dirty=true; }
             return;
         }
         if (state!=State::Fighting) return;
-        if (now-lastContact>12000 || now-lastProgress>20000) {
+        if (now-lastContact>contactTimeout || now-lastProgress>progressTimeout) {
             state=State::LinkLost; dirty=true; return;
         }
-        if (peerRound<round || now-lastProgress<1800) return;
+        if (peerRound<round || now-lastProgress<turnInterval) return;
         const int attacker=round%2, defender=1-attacker;
         const uint8_t a=mySide()==0 ? pokemon : opponent;
         const uint8_t b=mySide()==0 ? opponent : pokemon;
@@ -109,6 +111,7 @@ public:
         if (!hp[defender]) state=State::Finished;
     }
 private:
+    uint32_t turnInterval,contactTimeout,progressTimeout;
     uint32_t lastContact=0,lastProgress=0;
     bool helloTurn=false;
     void start(uint32_t now) { state=State::Fighting; lastContact=lastProgress=now; dirty=true; }

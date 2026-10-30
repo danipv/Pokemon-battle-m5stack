@@ -34,6 +34,10 @@ void i2cLock() {
 }
 
 void i2cUnlock() { xSemaphoreGiveRecursive(s_i2cMutex); }
+bool i2cTryLock(uint32_t timeoutMs) {
+    // boardInit() creates the mutex before UI/audio tasks start.
+    return s_i2cMutex && xSemaphoreTakeRecursive(s_i2cMutex,pdMS_TO_TICKS(timeoutMs))==pdTRUE;
+}
 
 static uint8_t s_pmicOn = 0, s_pmicOff = 0;
 uint8_t pmicPowerOnStatus() { return s_pmicOn; }
